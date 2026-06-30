@@ -1,0 +1,9 @@
+pre-commit:
+  parallel: true # 开启并发执行，显著减少等待时间
+  commands:
+    nilaway:
+      run: nilaway ./...
+    govulncheck:
+      run: govulncheck ./...
+    tests:
+      run: go test ./...
