@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vertex AI Proxy · 控制台</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+
+<body>
+
+  <div class="bg"></div>
+  <div class="bg-veil"></div>
+
+  <div id="login">
+    <div class="box glass">
+      <div class="logo">V</div>
+      <h1>Vertex AI Proxy</h1>
+      <div class="sub">OpenAI 兼容 · Vertex / Gemini 代理</div>
+      <label for="pw" class="sr-only">管理员密码</label><input id="pw" type="password" placeholder="管理员密码"
+        autocomplete="current-password">
+      <button class="btn" onclick="login()">登 录</button>
+      <div class="err" id="loginErr"></div>
+    </div>
+  </div>
+
+  <div id="app" class="hidden">
+    <button class="menu-btn" id="menuBtn" onclick="toggleMenu()">☰</button>
+    <aside class="glass">
+      <div class="brand"><span class="mk">V</span> Vertex AI Proxy</div>
+      <nav>
+        <button data-page="overview" class="active"><span class="ic">📊</span> 概览</button>
+        <button data-page="settings"><span class="ic">⚙️</span> 设置</button>
+        <button data-page="keys"><span class="ic">🔑</span> 密钥</button>
+        <button data-page="models"><span class="ic">🧩</span> 模型</button>
+        <button data-page="nodes"><span class="ic">🌐</span> 订阅与并发</button>
+        <button data-page="logs"><span class="ic">📝</span> 运行日志</button>
+        <button data-page="appearance"><span class="ic">🎨</span> 外观</button>
+      </nav>
+      <div class="spacer"></div>
+      <button class="btn ghost" onclick="logout()">退出登录</button>
+    </aside>
+
+    <div class="menu-overlay" id="menuOverlay" onclick="closeMenu()"></div>
+
+    <main>
+      <div class="glass main-glass-bg"></div>
+      <div class="main-content">
+        <section id="page-overview">
+          <div class="page-head">
+            <div>
+              <h2>概览</h2>
+              <div class="hint">服务运行状态与资源概况</div>
+            </div>
+            <button class="btn ghost" onclick="loadOverview()">刷新</button>
+          </div>
+          <div class="grid stats" id="ovCards"></div>
+        </section>
+
+        <section id="page-settings" class="hidden">
+          <div class="page-head">
+            <div>
+              <h2>设置</h2>
+              <div class="hint">改动稍后生效，不影响在途请求</div>
+            </div>
+          </div>
+          <div class="card glass" id="settingsForm"></div>
+        </section>
+
+        <section id="page-keys" class="hidden">
+          <div class="page-head">
+            <div>
+              <h2>密钥</h2>
+              <div class="hint">对外 API 密钥（name → key）</div>
+            </div>
+          </div>
+          <div class="card glass">
+            <div class="toolbar">
+              <div class="key-input-wrap"><label for="kName" class="sr-only">名称（如 alice）</label><input id="kName"
+                  placeholder="名称（如 alice）"><label for="kKey" class="sr-only">密钥（留空自动生成）</label><input id="kKey"
+                  placeholder="密钥（留空自动生成）"><button class="key-gen-btn" onclick="generateKey()" title="随机生成">✨</button>
+              </div>
+            </div>
+            <div class="toolbar"><label for="kDesc" class="sr-only">描述</label><input id="kDesc"
+                placeholder="描述（可选）"><button class="btn" onclick="addKey()">添加</button></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>名称</th>
+                    <th>密钥</th>
+                    <th>描述</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="keysBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="page-models" class="hidden">
+          <div class="page-head">
+            <div>
+              <h2>模型</h2>
+              <div class="hint">对外暴露的模型清单（每行一个）+ 别名映射</div>
+            </div>
+            <button class="btn" onclick="saveModels()">保存</button>
+          </div>
+          <div class="grid grid-2">
+            <div class="card glass">
+              <div class="field m-0"><label for="modelsList">模型清单（每行一个）</label><textarea id="modelsList" rows="13"
+                  class="font-mono"></textarea></div>
+            </div>
+            <div class="card glass">
+              <div class="field m-0"><label for="aliasMap">别名映射（每行 别名=真名）</label><textarea id="aliasMap" rows="13"
+                  class="font-mono"></textarea></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="page-nodes" class="hidden">
+          <div class="page-head">
+            <div>
+              <h2>代理与节点</h2>
+              <div class="hint">配置并发竞争请求池或锁定订阅节点。mihomo 已内嵌，无需占本地端口。</div>
+            </div>
+          </div>
+          <div class="grid grid-1">
+            <div class="card glass">
+              <div class="field"><label for="globalProxy">全局外部代理 (SOCKS5/HTTP)</label>
+                <div class="toolbar m-0"><input id="globalProxy" placeholder="socks5://127.0.0.1:1080"><button
+                    class="btn" onclick="saveGlobalProxy()">保存</button></div>
+                <div class="desc">配置后默认走该代理；如果未启用并发池且无锁定节点，将使用此代理。</div>
+              </div>
+            </div>
+            <div class="card glass">
+              <div class="field field-mb-20px">
+                <div class="field-heading label-gold">文件优选导入 (V2RayN / Clash / Mihomo 优选节点)</div>
+                <div class="toolbar m-0 gap-8">
+                  <label for="nodeImportFile" class="sr-only">选择节点导入文件</label><input type="file" id="nodeImportFile"
+                    accept=".txt,.yaml,.yml,.json,.conf,.list" class="file-input">
+                  <button class="btn ghost" onclick="importFileNodes(false)">导入追加</button>
+                  <button class="btn danger" onclick="importFileNodes(true)">清空并替换</button>
+                </div>
+                <div class="desc">导入本地导出的节点配置文件 (.txt / .yaml)。支持以追加或覆盖形式批量配置节点。</div>
+              </div>
+
+              <div class="field field-mb-20px">
+                <div class="field-heading label-gold">导入旧版 nodes.json</div>
+                <div class="toolbar m-0 gap-8">
+                  <label for="nodeJsonImportFile" class="sr-only">选择 nodes.json 导入文件</label><input type="file"
+                    id="nodeJsonImportFile" accept=".json" class="file-input">
+                  <button class="btn ghost" onclick="importJsonNodes(false)">导入追加</button>
+                  <button class="btn danger" onclick="importJsonNodes(true)">清空并替换</button>
+                </div>
+                <div class="desc">导入旧版 nodes.json。支持以追加或覆盖形式批量配置节点。</div>
+              </div>
+
+              <div class="divider"></div>
+
+              <div class="toolbar"><label for="subUrl" class="sr-only">订阅链接</label><input id="subUrl"
+                  placeholder="订阅链接 (vless/vmess/trojan/ss/ssr...)"><button class="btn"
+                  onclick="addAndFetchSub()">拉取并保存</button></div>
+              <div class="desc summary-text" id="nodesSummary">当前共 0 个节点</div>
+              <div class="actions">
+                <button class="btn ghost" onclick="testAllNodes()">批量测试</button>
+                <button class="btn ghost" onclick="sortNodesByLatency()">按延迟排序</button>
+                <button class="btn ghost" onclick="dedupNodes()">一键去重</button>
+                <button class="btn danger" onclick="deleteDisabledNodes()">删除禁用节点</button>
+                <span class="flex-1"></span>
+                <button class="btn ghost btn-blue" onclick="toggleSelectAllNodes()">全选/反选</button>
+                <button class="btn ghost btn-green" onclick="batchEnableSelectedNodes()">批量启用</button>
+                <button class="btn ghost btn-red" onclick="batchDisableSelectedNodes()">批量禁用</button>
+                <button class="btn danger" onclick="batchDeleteSelectedNodes()">批量删除</button>
+              </div>
+              <div id="testProgress" class="test-progress">
+                <div id="testProgressText" class="test-progress-text">准备测试...</div>
+                <div class="progress-track">
+                  <div id="testProgressFill" class="progress-fill"></div>
+                </div>
+                <div id="testProgressDetail" class="test-progress-detail"></div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th class="th-center"><label for="selectAllNodesCheckbox" class="sr-only">全选</label><input
+                          type="checkbox" id="selectAllNodesCheckbox" onclick="toggleSelectAllNodesCheckbox(this)"></th>
+                      <th>节点名 & 连接属性</th>
+                      <th>协议</th>
+                      <th>状态/延迟</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="nodesBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="page-appearance" class="hidden">
+          <div class="page-head">
+            <div>
+              <h2>外观</h2>
+              <div class="hint">自定义控制台背景</div>
+            </div>
+          </div>
+          <div class="card glass">
+            <div class="field"><label for="bgUrl">图片 URL</label>
+              <div class="toolbar m-0"><input id="bgUrl" placeholder="粘贴图片 URL…"><button class="btn"
+                  onclick="applyBgUrl()">应用</button></div>
+            </div>
+            <div class="field">
+              <div class="field-heading">从本地上传</div>
+              <div class="flex-gap-11"><button class="btn ghost"
+                  onclick="document.getElementById('bgFile').click()">选择图片…</button><button class="btn ghost"
+                  onclick="resetBg()">恢复默认</button></div>
+              <label for="bgFile" class="sr-only">上传背景图片</label><input id="bgFile" type="file" accept="image/*"
+                class="hidden" onchange="uploadBg(event)">
+            </div>
+            <div class="field m-0">
+              <div class="field-heading">图片预设</div>
+              <div class="preset" id="presets"></div>
+            </div>
+          </div>
+
+          <div class="card glass" style="margin-top:20px;">
+            <div class="field-heading">背景设置</div>
+            <div class="appearance-advanced">
+              <div class="font-ctrl-group align-top">
+                <span>纯色预设:</span>
+                <div class="preset" id="presetsColor"></div>
+              </div>
+              <div class="font-ctrl-group align-top" id="customPresetsRow" style="display:none; margin-top: 4px;">
+                <span>自定义预设:</span>
+                <div class="preset" id="presetsCustom"></div>
+              </div>
+              <div class="font-ctrl-group" style="margin-top: 12px; margin-bottom: 20px;">
+                <span>自定义单色背景:</span>
+                <div class="color-preview-box" id="bgColorBox" onclick="setActiveColorTarget('bg', -1, null, event)"
+                  title="点击编辑单色背景"></div>
+                <button class="btn ghost" onclick="saveCustomPreset('color')" style="margin-left:12px;">保存为预设</button>
+              </div>
+            </div>
+
+            <div class="field-heading mt-20">自定义渐变 (选区)</div>
+            <div class="gradient-builder" style="margin-bottom: 20px;">
+              <div class="gradient-stops" id="gradientStops"></div>
+              <div class="flex-gap-11" style="margin-top: 8px;">
+                <button class="btn ghost" onclick="addGradientStop()">+ 添加色标</button>
+                <button class="btn ghost" onclick="applyGradient()">应用渐变</button>
+                <button class="btn ghost" onclick="saveCustomPreset('gradient')">保存为预设</button>
+              </div>
+            </div>
+
+            <div class="field-heading mt-20">字体设置</div>
+            <div class="appearance-advanced">
+              <div class="font-ctrl-group">
+                <span>基础字号:</span>
+                <button class="btn ghost" onclick="adjustFontSize(-1)">A-</button>
+                <span id="currentFontSize" style="min-width: 40px; text-align: center;">14px</span>
+                <button class="btn ghost" onclick="adjustFontSize(1)">A+</button>
+              </div>
+              <div class="font-ctrl-group">
+                <span>字体颜色:</span>
+                <button class="btn ghost" id="btnColorAdaptive" onclick="setFontColorType('adaptive')">自适应</button>
+                <button class="btn ghost" id="btnColorSpecified" onclick="setFontColorType('specified')">指定色</button>
+                <div class="color-preview-box" id="fontColorBox" onclick="setActiveColorTarget('font', -1, null, event)"
+                  title="点击编辑字体颜色"></div>
+              </div>
+            </div>
+
+            <div class="color-palette-container" id="colorPaletteContainer">
+              <div class="palette-header" style="cursor: move" id="paletteHeaderDrag">
+                <div class="palette-preview" id="palettePreview"></div>
+                <button class="btn ghost btn-icon" onclick="activateEyeDropper()" title="吸管工具" style="padding:4px">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m2 22 6-6" />
+                    <path d="m22 2-6 6" />
+                    <path d="m13 5.5 5.5 5.5" />
+                    <path d="m5.5 13 5.5 5.5" />
+                    <path
+                      d="m17.5 3.5 3 3c.8.8.8 2.2 0 3l-6 6c-.8.8-2.2.8-3 0l-5-5c-.8-.8-.8-2.2 0-3l6-6c.8-.8 2.2-.8 3 0z" />
+                  </svg>
+                </button>
+                <label class="btn ghost btn-icon" title="原生颜色图" style="padding:4px; cursor:pointer;">
+                  🎨
+                  <input type="color" id="nativeColorPicker"
+                    style="visibility:hidden;width:0;height:0;position:absolute;"
+                    oninput="if(typeof updateFromNative === 'function') updateFromNative(this.value);">
+                </label>
+                <div class="palette-tabs" style="margin-left: auto;">
+                  <button class="active" onclick="switchPaletteMode('RGB')" id="tab-RGB">RGB</button>
+                  <button onclick="switchPaletteMode('HSL')" id="tab-HSL">HSL</button>
+                  <button onclick="switchPaletteMode('HEX')" id="tab-HEX">HEX</button>
+                </div>
+              </div>
+              <div class="palette-body">
+                <div id="palette-RGB">
+                  <div class="slider-row"><span>R</span><input type="range" id="rgb-r" min="0" max="255"
+                      oninput="updateFromRGB()"><input type="number" id="rgb-r-num" oninput="updateFromRGB()"></div>
+                  <div class="slider-row"><span>G</span><input type="range" id="rgb-g" min="0" max="255"
+                      oninput="updateFromRGB()"><input type="number" id="rgb-g-num" oninput="updateFromRGB()"></div>
+                  <div class="slider-row"><span>B</span><input type="range" id="rgb-b" min="0" max="255"
+                      oninput="updateFromRGB()"><input type="number" id="rgb-b-num" oninput="updateFromRGB()"></div>
+                </div>
+                <div id="palette-HSL" class="hidden">
+                  <div class="slider-row"><span>H</span><input type="range" id="hsl-h" class="track-hue" min="0"
+                      max="360" oninput="updateFromHSL()"><input type="number" id="hsl-h-num" oninput="updateFromHSL()">
+                  </div>
+                  <div class="slider-row"><span>S</span><input type="range" id="hsl-s" class="track-sat" min="0"
+                      max="100" oninput="updateFromHSL()"><input type="number" id="hsl-s-num" oninput="updateFromHSL()">
+                  </div>
+                  <div class="slider-row"><span>L</span><input type="range" id="hsl-l" class="track-lit" min="0"
+                      max="100" oninput="updateFromHSL()"><input type="number" id="hsl-l-num" oninput="updateFromHSL()">
+                  </div>
+                </div>
+                <div id="palette-HEX" class="hidden">
+                  <input type="text" id="hex-input" class="hex-large" oninput="updateFromHEX()" placeholder="#FFFFFF">
+                </div>
+              </div>
+            </div>
+
+
+          </div>
+        </section>
+
+        <section id="page-logs" class="hidden">
+          <div class="page-head">
+            <div>
+              <h2>运行日志</h2>
+              <div class="hint">系统最近 200 条日志</div>
+            </div>
+            <button class="btn ghost" onclick="loadLogs()">刷新</button>
+          </div>
+          <div class="card glass">
+            <div class="table-wrap" id="logContentUI" style="max-height: 60vh; overflow-y: auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 160px">时间</th>
+                    <th style="width: 80px">级别</th>
+                    <th>消息</th>
+                  </tr>
+                </thead>
+                <tbody id="logUITbody" class="font-mono" style="font-size: 0.9em;"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast glass" id="toast"></div>
+
+  <script src="utils.js"></script>
+  <script src="api.js"></script>
+  <script src="page-overview.js"></script>
+  <script src="page-settings.js"></script>
+  <script src="page-keys.js"></script>
+  <script src="page-models.js"></script>
+  <script src="page-nodes.js"></script>
+  <script src="page-appearance.js"></script>
+  <script src="page-logs.js"></script>
+  <script src="admin.js"></script>
+</body>
+
+</html>
