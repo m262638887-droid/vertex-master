@@ -31,4 +31,4 @@ ENV VPROXY_MODELS=/app/config/models.json
 
 EXPOSE 2156
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["sh", "-c", "yes 'yes' | /app/entrypoint.sh"]
