@@ -6,7 +6,7 @@
   "drop_max_tokens": false,
   "force_no_stream": false,
   "max_n": 8,
-  "max_retries": 1,
+  "max_retries": 10,
   "parallel_pool_delay_dynamic": false,
   "parallel_pool_delay_ms": 2500,
   "parallel_pool_enabled": true,
